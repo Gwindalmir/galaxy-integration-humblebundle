@@ -14,6 +14,10 @@ from model.download import TroveDownload, DownloadStructItem
 from model.subscription import MontlyContentData, ChoiceContentData, ContentChoiceOptions, ChoiceMarketingData, ChoiceMonth
 
 
+class WebpackParseError(Exception):
+    pass
+
+
 class AuthorizedHumbleAPI:
     _AUTHORITY = "https://www.humblebundle.com/"
     _PROCESS_LOGIN = "processlogin"
@@ -160,8 +164,11 @@ class AuthorizedHumbleAPI:
         search = f'<script id="{webpack_id}" type="application/json">'
         json_start = txt.find(search) + len(search)
         candidate = txt[json_start:].strip()
-        parsed, _ = json.JSONDecoder().raw_decode(candidate)
-        return parsed
+        try:
+            parsed, _ = json.JSONDecoder().raw_decode(candidate)
+            return parsed
+        except json.JSONDecodeError as e:
+            raise WebpackParseError(e)
 
     async def get_montly_trove_data(self) -> dict:
         """Parses a subscription/trove page to find list of recently added games.
