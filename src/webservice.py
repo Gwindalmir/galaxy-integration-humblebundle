@@ -11,7 +11,7 @@ from galaxy.http import create_client_session, handle_exception
 from galaxy.api.errors import UnknownBackendResponse
 
 from model.download import TroveDownload, DownloadStructItem
-from model.subscription import MontlyContentData, ChoiceContentData, ContentChoiceOptions, ChoiceMarketingData, ChoiceMonth
+from model.subscription import MontlyContentData, ChoiceContentData, ContentChoiceOptions, ContentMonthlyOptions, ChoiceMarketingData, ChoiceMonth
 
 
 class WebpackParseError(Exception):
@@ -103,10 +103,51 @@ class AuthorizedHumbleAPI:
         res = await self._request('get', self._TROVE_CHUNK_URL.format(chunk_index))
         return await res.json()
 
-    async def get_subscription_products_with_gamekeys(self):
+    async def get_subscription_products_with_gamekeys(self) -> dict:
         """
         Yields list of products - historically backward subscriptions info.
-        Every product includes few representative games from given subscription and other data as:
+        Choice products are in form of:
+        {
+            "contentChoiceData": {
+                "initial": {...},  # includes only 4 `ContentChoice`s
+                "extras": [...]
+            },
+            "gamekey": "wqheRstssFcHGcfP",
+            "isActiveContent": false,
+            "title": "May 2020",
+            "MAX_CHOICES": 9,
+            "productUrlPath": "may-2020",
+            "includesAnyUplayTpkds": false,
+            "unlockedContentEvents": [
+                "initial",
+                "chessultra"
+            ],
+            "downloadPageUrl": "/downloads?key=wqheRstssFcHGcfP",
+            "contentChoicesMade": {
+                "initial": {
+                    "choices_made": [
+                        "chessultra"
+                    ]
+                }
+            },
+            "isChoiceTier": true,
+            "productMachineName": "may_2020_choice"
+        }
+
+        Montly products goes after all choices and are in form of:
+        {
+            "machine_name": "september_2019_monthly",
+            "highlights": [
+                "8 Games",
+                "$179.00 Value"
+            ],
+            "order_url": "/downloads?key=Ge882ERvybmawmWd",
+            "short_human_name": "September 2019",
+            "hero_image": "https://hb.imgix.net/a25aa69d4c827d42142d631a716b3fbd89c15733.jpg?auto=compress,format&fit=crop&h=600&w=1200&s=789fedc066299f3d3ed802f6f1e55b6f",
+            "early_unlock_string": "Slay the Spire and Squad (Early Access)"
+        }
+
+        Every choice product includes few representative games from given subscription and other data as:
         `ContentChoiceOptions` (with gamekey if unlocked and made choices)
         or `MontlyContentData` (with `download_url` if was subscribed this month)
         Used in `https://www.humblebundle.com/subscription/home`
@@ -118,11 +159,7 @@ class AuthorizedHumbleAPI:
                 return
             res_json = await res.json()
             for product in res_json['products']:
-                if 'isChoiceTier' in product:
-                    yield ContentChoiceOptions(product)
-                else:  # no more choice content, now humble montly goes
-                    # yield MontlyContentData(product)
-                    return
+                yield product
             cursor = res_json['cursor']
 
     async def get_subscription_history(self, from_product: str):

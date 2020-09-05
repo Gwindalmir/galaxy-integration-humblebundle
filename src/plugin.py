@@ -7,6 +7,7 @@ import webbrowser
 import pathlib
 import json
 import calendar
+import datetime
 import typing as t
 from functools import partial
 from contextlib import suppress
@@ -26,7 +27,7 @@ from settings import Settings
 from webservice import AuthorizedHumbleAPI, WebpackParseError
 from model.game import TroveGame, Key, Subproduct, HumbleGame, ChoiceGame
 from model.types import HP, Tier
-from model.subscription import ChoiceMonth, UserSubscriptionPlan
+from model.subscription import ChoiceMonth, UserSubscriptionPlan, ContentMonthlyOptions
 from humbledownloader import HumbleDownloadResolver
 from library import LibraryResolver
 from local import AppFinder
@@ -199,12 +200,14 @@ class HumbleBundlePlugin(Plugin):
 
         if historical_subscriber:
             async for product in self._api.get_subscription_products_with_gamekeys():
-                subscriptions.append(Subscription(
-                    self._normalize_subscription_name(product.product_machine_name),
-                    owned=True
-                ))
-                if product.is_active_content:  # assuming there is only one "active" month at a time
-                    active_content_unlocked = True
+                if product['isChoiceTier']:
+                    subscriptions.append(Subscription(
+                        self._normalize_subscription_name(product['productMachineName']),
+                        owned=True
+                    ))
+                    if product['isActiveContent']:  # assuming there is only one "active" month at a time
+                        active_content_unlocked = True
+                break  # old "montlhy" products
 
         if not active_content_unlocked:
             '''
@@ -250,9 +253,17 @@ class HumbleBundlePlugin(Plugin):
             yield parse_and_cache(troves)
 
     async def get_subscription_games(self, subscription_name, context):
+        def last_second_of_subscription(product_machine_name) -> int:
+            month, year, _ = product_machine_name.split('_')
+            months = {v.lower(): k for k, v in enumerate(calendar.month_name)}
+            last_moment_of_month = datetime.datetime(int(year), months[month] + 1, day=1) - datetime.timedelta(seconds=1)
+            return int(last_moment_of_month.timestamp())
+
         if subscription_name == TROVE_SUBSCRIPTION_NAME:
-            last_subscription_date: int = xxx  # TODO
-            async for troves in self._get_trove_games(last_subscription_date):
+            async for product in self._api.get_subscription_products_with_gamekeys():
+                date_to: int = last_second_of_subscription(product['machine_name'])
+                break
+            async for troves in self._get_trove_games(last_subscription_date, date_to):
                 yield troves
             return
 
